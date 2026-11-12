@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LocalMediaRAG</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f6f4ef; --bg2:#efece4; --card:#fffdf8; --ink:#2b2a27; --muted:#6d6a63;
+    --line:#ddd8cc; --accent:#8a4a2f; --accent-ink:#fff8f2; --accent-soft:#f0e0d5;
+    --good:#3f7d4e; --warn:#a05a1f; --shadow:0 1px 2px rgba(60,50,30,.06),0 8px 24px rgba(60,50,30,.08);
+  }
+  :root:not([data-theme="light"])@media (prefers-color-scheme: dark){
+    --bg:#1a1916; --bg2:#23211d; --card:#23211d; --ink:#ece9e1; --muted:#a49f93;
+    --line:#37332c; --accent:#d9a083; --accent-ink:#221610; --accent-soft:#3a2a20;
+    --good:#7fc492; --warn:#d99a55; --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 28px rgba(0,0,0,.4);
+  }
+  :root[data-theme="dark"]{
+    --bg:#1a1916; --bg2:#23211d; --card:#23211d; --ink:#ece9e1; --muted:#a49f93;
+    --line:#37332c; --accent:#d9a083; --accent-ink:#221610; --accent-soft:#3a2a20;
+    --good:#7fc492; --warn:#d99a55; --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 28px rgba(0,0,0,.4);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:"DM Sans",system-ui,sans-serif; font-size:15px; line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+  /* header */
+  header{padding:34px 0 18px;border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  h1{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:30px;margin:0;letter-spacing:-.01em}
+  h1 .tag{color:var(--accent)}
+  .sub{color:var(--muted);font-size:13px;margin-top:4px}
+  .headrow{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px;flex-wrap:wrap}
+  .controls{display:flex;gap:10px;align-items:center}
+  button{font-family:inherit;font-size:13.5px;cursor:pointer;border-radius:10px;border:1px solid var(--line);
+    background:var(--card);color:var(--ink);padding:9px 14px;transition:background .15s,transform .05s}
+  button:hover{background:var(--bg2)}
+  button:active{transform:translateY(1px)}
+  button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+  button.primary:hover{filter:brightness(1.06);background:var(--accent)}
+  .statpills{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+  .pill{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:5px 13px;font-size:12.5px;color:var(--muted)}
+  .pill b{color:var(--ink);font-weight:700;font-variant-numeric:tabular-nums}
+  .pill.off{opacity:.5}
+  /* search */
+  .search{margin:26px 0 6px}
+  .bar{display:flex;gap:10px}
+  .bar input{flex:1;font-family:inherit;font-size:16px;color:var(--ink);background:var(--card);
+    border:1.5px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0}
+  .bar input:focus{outline:none;border-color:var(--accent)}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .chip{font-size:12.5px;color:var(--muted);background:var(--card);border:1px solid var(--line);
+    border-radius:999px;padding:5px 12px;cursor:pointer;transition:color .15s,border-color .15s}
+  .chip:hover{color:var(--accent);border-color:var(--accent)}
+  /* layout */
+  main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:24px;align-items:start;padding:8px 0 40px}
+  @media(max-width:900px){main{grid-template-columns:1fr}}
+  .results .tabs{display:flex;gap:6px;border-bottom:1px solid var(--line);margin-bottom:16px}
+  .tab{background:none;border:none;border-bottom:2px solid transparent;border-radius:0;padding:9px 4px;margin-right:14px;
+    font-size:14px;font-weight:600;color:var(--muted)}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+  .tab .n{font-variant-numeric:tabular-nums}
+  .empty{color:var(--muted);font-size:14px;padding:20px 0;border:1.5px dashed var(--line);border-radius:14px;text-align:center}
+  /* photo grid */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+  .photo{position:relative;background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;cursor:pointer;box-shadow:var(--shadow)}
+  .photo img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;background:var(--bg2)}
+  .people{position:absolute;left:10px;bottom:10px;display:flex;gap:5px;flex-wrap:wrap;max-width:calc(100% - 20px)}
+  .who{background:rgba(20,18,15,.72);color:#f5f1e8;font-size:11px;font-weight:600;border-radius:6px;padding:2px 7px;backdrop-filter:blur(2px)}
+  .who.unnamed{opacity:.85;font-style:italic}
+  .count{position:absolute;top:8px;right:8px;background:rgba(20,18,15,.72);color:#f5f1e8;font-size:11px;font-weight:700;border-radius:6px;padding:2px 7px}
+  /* doc cards */
+  .docs{display:flex;flex-direction:column;gap:10px}
+  .doc{display:flex;gap:14px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:13px 15px;align-items:flex-start}
+  .doc .ico{flex:none;width:38px;height:38px;border-radius:9px;background:var(--accent-soft);color:var(--accent);
+    display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase}
+  .doc .meta{min-width:0}
+  .doc .name{font-weight:600;font-size:14.5px;word-break:break-word}
+  .doc .snip{color:var(--muted);font-size:13px;margin-top:2px}
+  .doc .row{display:flex;gap:12px;align-items:center;margin-top:6px}
+  .doc a{font-size:12.5px;color:var(--accent);text-decoration:none;font-weight:600}
+  .doc a:hover{text-decoration:underline}
+  .doc .score{margin-left:auto;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+  /* people sidebar */
+  .side h2{font-family:"Fraunces",Georgia,serif;font-size:19px;font-weight:600;margin:0 0 4px}
+  .side .hint{color:var(--muted);font-size:12.5px;margin-bottom:14px}
+  .toler{margin-bottom:16px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .toler .lbl{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);margin-bottom:8px}
+  .toler input{width:100%;accent-color:var(--accent);cursor:pointer}
+  .clusters{display:flex;flex-direction:column;gap:10px}
+  .cluster{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px}
+  .cluster .top{display:flex;gap:10px;align-items:center}
+  .cluster img{width:52px;height:52px;border-radius:9px;object-fit:cover;background:var(--bg2);flex:none}
+  .cluster .info{min-width:0;flex:1}
+  .cluster .nm{font-size:13.5px;font-weight:700;color:var(--muted)}
+  .cluster .nm.has{color:var(--ink)}
+  .cluster .cnt{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .cluster input{width:100%;margin-top:6px;font-family:inherit;font-size:13.5px;padding:6px 9px;border:1.5px solid var(--line);
+    border-radius:8px;background:var(--bg);color:var(--ink)}
+  .cluster input:focus{outline:none;border-color:var(--accent)}
+  /* modal */
+  .modal{position:fixed;inset:0;background:rgba(15,13,10,.6);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .modal.open{display:flex}
+  .modal .box{background:var(--card);border:1px solid var(--line);border-radius:16px;max-width:860px;width:100%;max-height:90vh;overflow:auto;box-shadow:var(--shadow)}
+  .modal img{width:100%;display:block;border-radius:16px 16px 0 0}
+  .modal .cap{padding:14px 18px;font-size:13px;color:var(--muted)}
+  .modal .cap b{color:var(--ink)}
+  .modal .close{position:absolute;top:32px;right:32px;background:rgba(20,18,15,.7);color:#fff;border:none;width:36px;height:36px;border-radius:50%;font-size:18px}
+  footer{margin-top:8px;padding:22px 0 40px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px}
+  footer .paths{font-family:ui-monospace,monospace;font-size:12px;background:var(--card);border:1px solid var(--line);
+    border-radius:10px;padding:10px 13px;margin-top:8px;overflow-x:auto;white-space:pre}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);
+    padding:10px 16px;border-radius:10px;font-size:13px;opacity:0;transition:opacity .25s;z-index:60;pointer-events:none}
+  .toast.show{opacity:1}
+  .busy{opacity:.6;pointer-events:none}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="brand"><h1>Local<span class="tag">Media</span>RAG</h1></div>
+    <div class="sub">Offline retrieval over your photo gallery &amp; documents — everything runs on this machine.</div>
+    <div class="headrow">
+      <div class="statpills" id="statpills">
+        <span class="pill off" id="sp-built">building…</span>
+      </div>
+      <div class="controls">
+        <button id="themeBtn" title="Toggle theme">◐</button>
+        <button id="rescanBtn" class="primary">Rescan media</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <section class="search">
+    <div class="bar">
+      <input id="q" type="text" placeholder='Ask naturally — e.g. "photos of me with Mr.X"' autocomplete="off" />
+      <button id="go" class="primary">Search</button>
+    </div>
+    <div class="chips" id="chips"></div>
+  </section>
+
+  <main>
+    <section class="results">
+      <div class="tabs">
+        <button class="tab active" data-t="photos">Photos <span class="n" id="nPhoto"></span></button>
+        <button class="tab" data-t="docs">Documents <span class="n" id="nDocs"></span></button>
+      </div>
+      <div id="photosPane">
+        <div class="empty">Run a search to see photos. Try the example chips above.</div>
+      </div>
+      <div id="docsPane" style="display:none">
+        <div class="empty">Run a search to see documents.</div>
+      </div>
+    </section>
+
+    <aside class="side">
+      <h2>People</h2>
+      <div class="hint">Faces are grouped automatically. Give each group a name, then search by it. "me" and "mr.x" are already named.</div>
+      <div class="toler">
+        <div class="lbl"><span>Cluster sensitivity</span><span id="tolVal">0.50</span></div>
+        <input type="range" id="tol" min="0.2" max="0.9" step="0.01" value="0.50" />
+      </div>
+      <div class="clusters" id="clusters"></div>
+    </aside>
+  </main>
+</div>
+
+<footer>
+  <div class="wrap">
+    <div>Fully offline — no data leaves this computer. Detection &amp; recognition use bundled models; text extraction is best-effort (scanned images aren't OCR'd).</div>
+    <div class="paths" id="paths"></div>
+  </div>
+</footer>
+
+<div class="modal" id="modal"><button class="close" id="mclose">✕</button><div class="box"><img id="mimg" alt=""/><div class="cap" id="mcap"></div></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $=s=>document.querySelector(s);
+const state={clusters:[],photos:[],docs:[],mode:"photos",status:null,tol:0.5};
+
+/* ---------- theme ---------- */
+(function(){
+  const b=localStorage.getItem("lmr-theme");
+  if(b==="dark")document.documentElement.setAttribute("data-theme","dark");
+  if(b==="light")document.documentElement.setAttribute("data-theme","light");
+})();
+$("#themeBtn").onclick=()=>{
+  const r=document.documentElement, cur=r.getAttribute("data-theme");
+  const next= cur==="dark"?"light":(cur==="light"?null:"dark");
+  if(next)r.setAttribute("data-theme",next);else r.removeAttribute("data-theme");
+  localStorage.setItem("lmr-theme",next||"system");
+};
+
+/* ---------- helpers ---------- */
+let toastT;
+function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("show");clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("show"),2200);}
+async function api(path,method,body){
+  const o={method,headers:{}};
+  if(body){o.headers["Content-Type"]="application/json";o.body=JSON.stringify(body);}
+  const r=await fetch(path,o);const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);return j;
+}
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ---------- status ---------- */
+async function loadStatus(){
+  const s=await api("/api/status");
+  state.status=s; state.tol=s.tolerance;
+  $("#tol").value=s.tolerance; $("#tolVal").textContent=s.tolerance.toFixed(2);
+  const sp=$("#statpills");
+  sp.innerHTML=[
+    `<span class="pill"><b>${s.photos}</b> photos</span>`,
+    `<span class="pill"><b>${s.docs}</b> documents</span>`,
+    `<span class="pill"><b>${s.faces}</b> faces</span>`,
+    `<span class="pill"><b>${s.clusters}</b> people <span style="opacity:.7">(${s.named} named)</span></span>`,
+    s.last_build?`<span class="pill">built ${s.last_build}</span>`:""
+  ].join("");
+  $("#paths").textContent=
+    "photos      →  media/"+s.dirs.photos+"\n"+
+    "documents   →  media/"+s.dirs.documents+"\n"+
+    "label refs  →  media/"+s.dirs.labels+"  (optional: labels/<name>/<photo>.jpg)";
+}
+
+/* ---------- people ---------- */
+async function loadPeople(){
+  const d=await api("/api/people");
+  state.clusters=d.clusters;
+  const box=$("#clusters");
+  box.innerHTML=d.clusters.map(c=>{
+    const nm=c.name||"";
+    return `<div class="cluster" data-id="${c.id}">
+      <div class="top">
+        <img src="/faces/${esc(c.sample||"")}" alt="" loading="lazy"/>
+        <div class="info">
+          <div class="nm ${nm?"has":""}">${nm?esc(nm):"Unnamed group"}</div>
+          <div class="cnt">${c.count} ${c.count===1?"face":"faces"}</div>
+        </div>
+      </div>
+      <input value="${esc(nm)}" placeholder="name this person…" data-id="${c.id}"/>
+    </div>`;
+  }).join("")||'<div class="empty">No faces found yet.</div>';
+  box.querySelectorAll("input").forEach(inp=>{
+    let t;
+    inp.addEventListener("input",()=>{clearTimeout(t);t=setTimeout(()=>rename(parseInt(inp.dataset.id),inp.value.trim()),600);});
+    inp.addEventListener("keydown",e=>{if(e.key==="Enter"){clearTimeout(t);rename(parseInt(inp.dataset.id),inp.value.trim());inp.blur();}});
+  });
+}
+async function rename(id,name){await api("/api/name","POST",{cluster_id:id,name});toast("Name saved");loadPeople();}
+
+/* ---------- tolerance ---------- */
+let tolT;
+$("#tol").addEventListener("input",e=>{$("#tolVal").textContent=(+e.target.value).toFixed(2);clearTimeout(tolT);tolT=setTimeout(async()=>{await api("/api/tolerance","POST",{tolerance:+e.target.value});toast("Re-clustered");loadStatus();loadPeople();},500);});
+
+/* ---------- search ---------- */
+const EXAMPLES=["photos of me","photos of me with Mr.X","my python certificates","show me photos of mr.x","certificate pdf"];
+function renderChips(){
+  $("#chips").innerHTML=EXAMPLES.map(x=>`<span class="chip">${esc(x)}</span>`).join("");
+  document.querySelectorAll(".chip").forEach(ch=>ch.onclick=()=>{$("#q").value=ch.textContent;runSearch();});
+}
+function showTab(t){
+  state.mode=t;
+  document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.t===t));
+  $("#photosPane").style.display=t==="photos"?"":"none";
+  $("#docsPane").style.display=t==="docs"?"":"none";
+}
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>showTab(b.dataset.t));
+
+async function runSearch(){
+  const q=$("#q").value.trim(); if(!q)return;
+  const btn=$("#go");btn.classList.add("busy");
+  try{
+    const r=await api("/api/query","POST",{q});
+    state.photos=r.photos; state.docs=r.docs;
+    renderPhotos(r.persons); renderDocs();
+    if(r.mode)showTab(r.mode);
+  }catch(e){toast("Search failed: "+e.message);}
+  finally{btn.classList.remove("busy");}
+}
+$("#go").onclick=runSearch;
+$("#q").addEventListener("keydown",e=>{if(e.key==="Enter")runSearch();});
+
+function renderPhotos(persons){
+  const box=$("#photosPane"); $("#nPhoto").textContent=state.photos.length?"("+state.photos.length+")":"";
+  if(!state.photos.length){box.innerHTML='<div class="empty">No matching photos'+(persons&&persons.length?" for "+esc(persons.join(" & ")):"")+'.</div>';return;}
+  box.innerHTML=`<div class="grid">`+state.photos.map((p,i)=>{
+    const nameTags=p.names.map(n=>`<span class="who">${esc(n)}</span>`).join("")
+      +(p.names.length?`<span class="who unnamed">+${p.nfaces-p.names.length}</span>`:"");
+    return `<div class="photo" data-i="${i}">
+      <img src="/${esc(p.thumb||"")}" alt="" loading="lazy"/>
+      <span class="count">${p.nfaces}</span>
+      <div class="people">${nameTags||`<span class="who unnamed">${p.nfaces} ${p.nfaces===1?"person":"people"}</span>`}</div>
+    </div>`;
+  }).join("")+`</div>`;
+  box.querySelectorAll(".photo").forEach(c=>c.onclick=()=>openModal(state.photos[+c.dataset.i]));
+}
+function renderDocs(){
+  const box=$("#docsPane"); $("#nDocs").textContent=state.docs.length?"("+state.docs.length+")":"";
+  if(!state.docs.length){box.innerHTML='<div class="empty">No matching documents.</div>';return;}
+  box.innerHTML=`<div class="docs">`+state.docs.map(d=>{
+    const ext=(d.ext||"").replace(".","")||"file";
+    return `<div class="doc">
+      <div class="ico">${esc(ext)}</div>
+      <div class="meta">
+        <div class="name">${esc(d.name)}</div>
+        <div class="snip">${esc(d.snippet)}</div>
+        <div class="row"><a href="/${esc(d.rel)}" target="_blank" rel="noopener">Open file ↗</a>
+          <span class="score">${d.score.toFixed(2)}</span></div>
+      </div>
+    </div>`;
+  }).join("")+`</div>`;
+}
+function openModal(p){
+  $("#mimg").src="/"+p.thumb;
+  $("#mcap").innerHTML=`<b>${esc(p.rel.split("/").pop())}</b> &nbsp;·&nbsp; ${p.nfaces} ${p.nfaces===1?"face":"faces"} detected &nbsp;·&nbsp; `+p.names.map(esc).join(", ");
+  $("#modal").classList.add("open");
+}
+$("#mclose").onclick=()=>$("#modal").classList.remove("open");
+$("#modal").addEventListener("click",e=>{if(e.target.id==="modal")$("#modal").classList.remove("open");});
+
+/* ---------- rescan ---------- */
+$("#rescanBtn").onclick=async function(){
+  this.classList.add("busy"); this.textContent="Scanning…";
+  try{const r=await api("/api/rescan","POST");toast(`Indexed ${r.photos} photos, ${r.docs} docs, ${r.clusters} people in ${r.seconds}s.`);await loadStatus();await loadPeople();}
+  catch(e){toast("Rescan failed: "+e.message);}
+  finally{this.classList.remove("busy");this.textContent="Rescan media";}
+};
+
+/* ---------- init ---------- */
+(async function init(){
+  renderChips();
+  try{await loadStatus();await loadPeople();}
+  catch(e){toast("Could not reach the backend. Is server.py running?");}
+})();
+</script>
+</body>
+</html>
